@@ -24,6 +24,22 @@ public:
 private:
 	ThreadFunc func_;
 };
+/*
+example:
+ThreadPool pool;
+pool.start(4);
+class mytask:public task
+{
+public:
+		void run(){//线程代码};
+};
+pool.submittask(std::make_shared<mytask>());
+
+
+*/
+
+
+
 //线程池支持的模式
 enum class PoolMode
 {
@@ -71,7 +87,7 @@ private:
 	void threadFunc();
 
 private:
-	std::vector<Thread*> threads_;//线程列表
+	std::vector<std::unique_ptr<Thread>> threads_;//线程列表
 	size_t initThreadSize_;//初始线程数量
 
 	std::queue<std::shared_ptr<Task>> taskQue_;//任务队列
