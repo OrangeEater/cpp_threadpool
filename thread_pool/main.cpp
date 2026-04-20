@@ -2,8 +2,18 @@
 #include <chrono>
 #include <thread>
 #include "threadpool.h"
+
+
+//当前的线程池，1、无法实现对任意类型输入的接受，2、无法返回结果result
 class MyTask :public Task
 {
+//public:
+//    MyTask(int begin, int end)
+//        :begin_(begin)
+//        , end_(end)
+//    {
+//
+//    }
     void run()
     {
         std::cout << "tid:" << std::this_thread::get_id()<< 
