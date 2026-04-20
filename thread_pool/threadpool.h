@@ -9,6 +9,106 @@
 #include <condition_variable>
 #include <functional>
 
+//接受任意类型的输入
+class Any
+{
+public:
+	Any() = default;
+	~Any() = default;
+	Any(const Any&)=delete;
+	Any& operator=(const Any&) = delete;
+	Any(Any&&) = default;
+	Any& operator=(Any&&) = default;
+
+
+	//能够接受任意类型的输入
+	template<typename T>
+	Any(T data) : base_(std::make_unique<Derive<T>>(data))
+	{ }
+
+	//能够把any对象里存储的data取出
+	template<typename T>
+	T cast_()
+	{
+		//如何从base找到derive对象，取出变量
+		//基类到派生指针
+		Derive<T>* pd = dynamic_cast<Derive<T>*>(base_.get());
+		if (pd == nullptr)
+		{
+			throw"type is unmatch";
+		}
+		return pd->data_;
+
+	}
+private:
+	//积累类型
+	class Base
+	{
+	public:
+		virtual ~Base() = default;
+	};
+	//派生类类型
+	template<typename T>
+	class Derive : public Base
+	{
+	public:
+		Derive(T data) : data_(data)
+		{
+
+		}
+		T data_;
+	};
+private:
+	std::unique_ptr<Base> base_;
+};
+
+
+//实现一个信号量类
+class Semaphore
+{
+public:
+	Semaphore(int limit=0) : resLimit_(limit)
+	{ }
+	~Semaphore() = default;
+	void wait()
+	{
+		std::unique_lock<std::mutex> lock(mtx_);
+		//等待有资源
+		cond_.wait(lock, [&]()->bool {return resLimit_ > 0;});
+		resLimit_--;
+	}
+
+	void post()
+	{
+		std::unique_lock<std::mutex> lock(mtx_);
+		resLimit_++;
+		cond_.notify_all();
+	}
+private:
+	int resLimit_;
+	std::mutex mtx_;
+	std::condition_variable cond_;
+};
+//实现接受提交到任务完成后的返回值类型result
+
+class Task;
+
+class Result
+{
+public:
+	Result(std::shared_ptr<Task> task, bool isValid=true);
+	~Result() = default;
+	//setval的方法，获取任务执行完的返回值
+	void setVal(Any any);
+	//get方法，用户调用获取task返回值
+	Any get();
+
+private:
+	Any any_;//存储任务的返回值
+	Semaphore sem_;//线程通信的信号量
+	std::shared_ptr<Task> task_;//指向对应后去返回值的任务对象
+	std::atomic_bool isValid_;
+};
 //线程类型
 class Thread
 {
@@ -50,9 +150,15 @@ enum class PoolMode
 class Task
 {
 public:
-	//用户可自定义的任务类型，从task继承，重写run，实现自定义
+	Task();
+	~Task()=default;
 
-	virtual void run() = 0;
+	void exec();
+	void setResult(Result* res);
+	//用户可自定义的任务类型，从task继承，重写run，实现自定义
+	virtual Any run() = 0;
+private:
+	Result* result_;//task会在result之前结束
 };
 //线程池类型
 class ThreadPool
@@ -74,7 +180,7 @@ public:
 	void setTaskQueMaxThreshHold(int threshhold);
 
 	//给线程池提交任务
-	void submitTask(std::shared_ptr<Task>sp);
+	Result submitTask(std::shared_ptr<Task>sp);
 
 	//开启线程池
 	void start(int initThreadSize = 4);
