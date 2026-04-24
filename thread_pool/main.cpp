@@ -36,10 +36,17 @@ private:
 int main()
 {
     ThreadPool pool;
+
+    //用户如何设置工作模式
+    pool.setMode(PoolMode::MODE_CACHED);
+    //设置完毕启动
     pool.start(4);
     Result res_1 = pool.submitTask(std::make_shared<MyTask>(1,1000));
     Result res_2 = pool.submitTask(std::make_shared<MyTask>(1001, 2000));
     Result res_3 = pool.submitTask(std::make_shared<MyTask>(2001, 3000));
+    pool.submitTask(std::make_shared<MyTask>(3001, 4000));
+    pool.submitTask(std::make_shared<MyTask>(3001, 4000));
+    pool.submitTask(std::make_shared<MyTask>(3001, 4000));
     //随着task执行，task对象没了，依赖于task对象的result对象也没了
     int sum1 = res_1.get().cast_<int>();
     int sum2 = res_2.get().cast_<int>();
@@ -67,7 +74,7 @@ int main()
     //pool.submitTask(std::make_shared<MyTask>());
     //pool.submitTask(std::make_shared<MyTask>());
     //pool.submitTask(std::make_shared<MyTask>());
-
+    getchar();
 
 
 }
