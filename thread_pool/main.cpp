@@ -35,6 +35,7 @@ private:
 
 int main()
 {
+    //threadpool析构后，如何把线程池相关的线程资源全部回收
     ThreadPool pool;
 
     //用户如何设置工作模式

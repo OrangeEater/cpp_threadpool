@@ -5,8 +5,8 @@
 #include <chrono>
 
 const int TASK_MAX_THRESHHOLD = 10;
-const int THREAD_MAX_THRESHHOLD = 10;
-const int THREAD_MAX_IDLE_TIME = 10;//单位秒s
+const int THREAD_MAX_THRESHHOLD = 200;
+const int THREAD_MAX_IDLE_TIME = 60;//单位秒s
 //线程池构造
 ThreadPool::ThreadPool()
 	:initThreadSize_(0)
@@ -21,7 +21,13 @@ ThreadPool::ThreadPool()
 
 //线程池析构
 ThreadPool::~ThreadPool()
-{ }
+{
+	isPoolRunning_ = false;
+	notEmpty_.notify_all();
+	//等待线程池的线程返回，结束，状态：阻塞、正在执行任务中
+	std::unique_lock<std::mutex> lock(taskQueMtx_);
+	exitCond_.wait(lock, [&]()->bool {return threads_.size() == 0;});
+}
 
 
 //设置线程池的工作模式
@@ -126,7 +132,7 @@ void ThreadPool::threadFunc(int threadid)
 {
 	auto lastTime = std::chrono::high_resolution_clock().now();
 
-	for (;;)
+	while(isPoolRunning_)
 	{
 		std::shared_ptr<Task>  task;
 		{
@@ -136,12 +142,13 @@ void ThreadPool::threadFunc(int threadid)
 			"尝试获取任务" << std::endl;
 
 		//在线程空闲时间过长时需要回收如何实现
-		if (poolMode_ == PoolMode::MODE_CACHED)
-		{
+
 			//每秒返回一次  如何区分超时和有任务待执行返回
 			while (taskQue_.size() == 0)
 			{
-				if (std::cv_status::timeout ==
+				if (poolMode_ == PoolMode::MODE_CACHED)
+				{				
+					if (std::cv_status::timeout ==
 					notEmpty_.wait_for(lock, std::chrono::seconds(1)))
 				{
 					auto now =std::chrono::high_resolution_clock().now();
@@ -162,14 +169,21 @@ void ThreadPool::threadFunc(int threadid)
 
 					}
 				}
-				
 			}
+			else
+			{	//等待notempty通知
+			notEmpty_.wait(lock);
+			}
+				//线程池结束回收资源
+				if (!isPoolRunning_)
+				{
+					threads_.erase(threadid);
+					std::cout << "threadsid:" << std::this_thread::get_id() << "exit!"
+						<< std::endl;
+					exitCond_.notify_all();
+					return;
+				}
 		 }
-		else
-		{
-		//等待notempty通知
-		notEmpty_.wait(lock, [&]()->bool {return taskQue_.size() > 0;});
-		}
 		
 
 		idleThreadSize_--;
@@ -197,15 +211,13 @@ void ThreadPool::threadFunc(int threadid)
 			task->exec();
 			//执行完任务
 		}
-
-
 		idleThreadSize_++;
 		lastTime = std::chrono::high_resolution_clock().now();//更新线程执行完的时间
-
-
-
 	}
-
+	threads_.erase(threadid);
+	std::cout << "threadsid:" << std::this_thread::get_id() << "exit!"
+		<< std::endl;
+	exitCond_.notify_all();
 
 	//std::cout << "begin threadFunc tid:" << std::this_thread::get_id()<< std::endl;
 	//std::cout << "end threadFunc tid:" << std::this_thread::get_id()<< std::endl;
